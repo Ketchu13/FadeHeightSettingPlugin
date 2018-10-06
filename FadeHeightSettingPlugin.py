@@ -7,8 +7,10 @@ from UM.Application import Application
 from UM.Settings.SettingDefinition import SettingDefinition
 from UM.Settings.DefinitionContainer import DefinitionContainer
 from UM.Settings.ContainerRegistry import ContainerRegistry
-
+from collections import OrderedDict
 from UM.i18n import i18nCatalog
+from UM.Preferences import Preferences
+from UM.Logger import Logger
 
 i18n_catalog = i18nCatalog("FadeHeightSettingPlugin")
 
@@ -20,19 +22,50 @@ class FadeHeightSettingPlugin(Extension):
         self._application = Application.getInstance()
 
         self._i18n_catalog = None
-        self._setting_key = "fade_height_mm"
-        self._setting_dict = {
+        self._category_key = "platform_adhesion"
+        self._fade_height_setting_key = "fade_height_mm"
+        self._fade_height_setting_dict = {
             "label": "Fade Height",
             "description": "Sets the auto bed leveling fade height in mm. Note that unless this setting is used in a start gcode snippet, it has no effect!",
             "type": "float",
             "default_value": 0,
             "settable_per_mesh": False,
             "settable_per_extruder": False,
+            "settable_per_meshgroup": False,
+            "enabled": "abl_enabled"
+        }
+        self._abl_enabled_key = "abl_enabled"
+        self._abl_enabled_dict = {
+            "label": "Auto Bed Leveling",
+            "description": "Enable or disable the bed leveling correction.",
+            "type": "bool",
+            "default_value": False,
+            "settable_per_mesh": False,
+            "settable_per_extruder": False,
             "settable_per_meshgroup": False
         }
+        """self._abl_args_key = "abl_args"
+        self._abl_args_dict = {
+            "label": "ABL Gcode",
+            "description": "Gcode command to use for Auto Bed Leveling",
+            "type": "str",
+            "default_value": "G29",
+            "settable_per_mesh": False,
+            "settable_per_extruder": False,
+            "settable_per_meshgroup": False,
+            "enabled": "abl_enabled"
+        }"""
 
         ContainerRegistry.getInstance().containerLoadComplete.connect(self._onContainerLoadComplete)
+        self._application.engineCreatedSignal.connect(self._onEngineCreated)
+
+        self._application.globalContainerStackChanged.connect(self._onGlobalContainerStackChanged)
+        self._onGlobalContainerStackChanged()
+
         self._application.getOutputDeviceManager().writeStarted.connect(self._filterGcode)
+
+    def _onGlobalContainerStackChanged(self):
+        self._global_container_stack = self._application.getGlobalContainerStack()
 
     def _onContainerLoadComplete(self, container_id):
         container = ContainerRegistry.getInstance().findContainers(id=container_id)[0]
@@ -43,21 +76,64 @@ class FadeHeightSettingPlugin(Extension):
             # skip extruder definitions
             return
 
-        platform_adhesion_category = container.findDefinitions(key="platform_adhesion")
-        fade_height_setting = container.findDefinitions(key=self._setting_key)
-        if platform_adhesion_category and not fade_height_setting:
-            # this machine doesn't have a Fade Height setting yet
-            platform_adhesion_category = platform_adhesion_category[0]
-            fade_height_definition = SettingDefinition(self._setting_key, container, platform_adhesion_category,
-                                                       self._i18n_catalog)
-            fade_height_definition.deserialize(self._setting_dict)
+        category = container.findDefinitions(key=self._category_key)
+        if not category:
+            category = SettingDefinition(self._category_key, container, None, self._i18n_catalog)
+            category_dict = self._category_dict
+            category_dict["children"] = OrderedDict()
+            category.deserialize(category_dict)
+            container.addDefinition(category)
+            container._updateRelations(category)
 
-            # add the setting to the already existing platform adhesion settingdefinition
-            # private member access is naughty, but the alternative is to serialise, nix and deserialise the whole thing,
-            # which breaks stuff
-            platform_adhesion_category._children.append(fade_height_definition)
-            container._definition_cache[self._setting_key] = fade_height_definition
-            container._updateRelations(fade_height_definition)
+        self.create_and_attach_setting(container,
+                                       self._abl_enabled_key,
+                                       self._abl_enabled_dict,
+                                       self._category_key
+                                       )
+        """self.create_and_attach_setting(container,
+                                       self._abl_args_key,
+                                       self._abl_args_dict,
+                                       self._category_key
+                                       )"""
+        self.create_and_attach_setting(container,
+                                       self._fade_height_setting_key,
+                                       self._fade_height_setting_dict,
+                                       self._category_key
+                                       )
+
+    def create_and_attach_setting(self, container, setting_key, setting_dict, parent):
+        parent_category = container.findDefinitions(key=parent)
+        definition = container.findDefinitions(key=setting_key)
+        if parent_category and not definition:
+            # this machine doesn't have a scalable extra prime setting yet
+            parent_category = parent_category[0]
+            setting_definition = SettingDefinition(setting_key, container, parent_category, self._i18n_catalog)
+            setting_definition.deserialize(setting_dict)
+
+            parent_category._children.append(setting_definition)
+            container._definition_cache[setting_key] = setting_definition
+            container._updateRelations(setting_definition)
+
+    def _onEngineCreated(self):
+        # Fix preferences
+        preferences = Preferences.getInstance()
+        visible_settings = preferences.getValue("general/visible_settings")
+        if not visible_settings:
+            # Wait until the default visible settings have been set
+            return
+        visible_settings_changed = False
+        if self._category_key not in visible_settings:
+            visible_settings += ";%s" % self._category_key
+            visible_settings_changed = True
+
+        if not visible_settings_changed:
+            return
+        preferences.setValue("general/visible_settings", visible_settings)
+
+    def getPropVal(self, name_key):
+        """Get the property value by is name"""
+        property_value = self._global_container_stack.getProperty(name_key, "value")
+        return property_value
 
     def _filterGcode(self, output_device):
         scene = self._application.getController().getScene()
@@ -72,8 +148,11 @@ class FadeHeightSettingPlugin(Extension):
             return
 
         # get setting from Cura
-        fade_height_mm = global_container_stack.getProperty(self._setting_key, "value")
-        if fade_height_mm == 0:
+        fade_height_mm = self.getPropVal(self._fade_height_setting_key)
+        abl_enabled = self.getPropVal(self._abl_enabled_key)
+        # abl_args        = self.getPropVal(self._abl_args_key)
+
+        if fade_height_mm == 0 or abl_enabled is False:
             return
 
         gcode_dict = getattr(scene, "gcode_dict", {})
@@ -88,12 +167,13 @@ class FadeHeightSettingPlugin(Extension):
                 continue
 
             if ";FADEHEIGHTPROCESSED\n" not in gcode_list[0]:
-                gcode_list[1] = ("M420 Z%d ;added by FadeHeightSettingPlugin\n" % fade_height_mm) + gcode_list[1]
+                gcode_list[1] = gcode_list[1] + ("M420 S%i Z%d ;added by FadeHeightSettingPlugin\n" % (
+                int(abl_enabled), fade_height_mm))
                 gcode_list[0] += ";FADEHEIGHTPROCESSED\n"
                 gcode_dict[plate_id] = gcode_list
                 dict_changed = True
             else:
-                Logger.log("d", "Plate %s has already been processed", plate_id)
+                Logger.log("d", "Plate %s has already been processed by FadeHeight", plate_id)
                 continue
 
         if dict_changed:
