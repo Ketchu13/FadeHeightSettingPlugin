@@ -134,7 +134,6 @@ class FadeHeightSettingPlugin(Extension):
         # get setting from Cura
         fade_height_mm = self.getPropVal(self._fade_height_setting_key)
         abl_enabled = self.getPropVal(self._abl_enabled_key)
-        # abl_args        = self.getPropVal(self._abl_args_key)
 
         if fade_height_mm == 0 or abl_enabled is False:
             return
