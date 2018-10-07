@@ -1,7 +1,7 @@
 {
     "name": "Fade Height Setting",
     "author": "fieldOfView, ketchu13",
-    "version": "0.1",
+    "version": "3.5",
     "description": "Adds a Fade Height setting that can be used in start gcode snippets\nFade Height gradually reduce leveling correction until a set height is reached.",
     "api": 5
 }
