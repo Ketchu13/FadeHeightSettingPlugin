@@ -27,6 +27,7 @@ class FadeHeightSettingPlugin(Extension):
         self._fade_height_setting_dict = {
             "label": "Fade Height",
             "description": "Sets the auto bed leveling fade height in mm. Note that unless this setting is used in a start gcode snippet, it has no effect!",
+            "unit": "mm",
             "type": "float",
             "default_value": 0,
             "settable_per_mesh": False,
