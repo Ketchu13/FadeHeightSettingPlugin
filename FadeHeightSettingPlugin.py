@@ -44,17 +44,6 @@ class FadeHeightSettingPlugin(Extension):
             "settable_per_extruder": False,
             "settable_per_meshgroup": False
         }
-        """self._abl_args_key = "abl_args"
-        self._abl_args_dict = {
-            "label": "ABL Gcode",
-            "description": "Gcode command to use for Auto Bed Leveling",
-            "type": "str",
-            "default_value": "G29",
-            "settable_per_mesh": False,
-            "settable_per_extruder": False,
-            "settable_per_meshgroup": False,
-            "enabled": "abl_enabled"
-        }"""
 
         ContainerRegistry.getInstance().containerLoadComplete.connect(self._onContainerLoadComplete)
         self._application.engineCreatedSignal.connect(self._onEngineCreated)
@@ -90,11 +79,6 @@ class FadeHeightSettingPlugin(Extension):
                                        self._abl_enabled_dict,
                                        self._category_key
                                        )
-        """self.create_and_attach_setting(container,
-                                       self._abl_args_key,
-                                       self._abl_args_dict,
-                                       self._category_key
-                                       )"""
         self.create_and_attach_setting(container,
                                        self._fade_height_setting_key,
                                        self._fade_height_setting_dict,
