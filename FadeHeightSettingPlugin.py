@@ -37,7 +37,7 @@ class FadeHeightSettingPlugin(Extension):
         }
         self._abl_enabled_key = "abl_enabled"
         self._abl_enabled_dict = {
-            "label": "Auto Bed Leveling",
+            "label": "Auto bed leveling correction",
             "description": "Enable or disable the bed leveling correction.",
             "type": "bool",
             "default_value": False,
@@ -136,8 +136,8 @@ class FadeHeightSettingPlugin(Extension):
         fade_height_mm = self.getPropVal(self._fade_height_setting_key)
         abl_enabled = self.getPropVal(self._abl_enabled_key)
 
-        if fade_height_mm == 0 or abl_enabled is False:
-            return
+        # if fade_height_mm == 0 or abl_enabled is False:
+            # return
 
         gcode_dict = getattr(scene, "gcode_dict", {})
         if not gcode_dict:  # this also checks for an empty dict
