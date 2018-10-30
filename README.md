@@ -10,3 +10,8 @@ If the start gcode doesn't include a M420 statement to set the fade height value
 M420 S{abl_enabled} Z{fade_height_mm}
 ...
 ```
+What's new in v 0.1.3:
+_ Fix version number.
+_ Edit some comments / descriptions.
+_ Setting now disable the bed leveling correction, instead of turning off the plugin.
+_ Fix missing assignement.
