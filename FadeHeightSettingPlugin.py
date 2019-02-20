@@ -1,4 +1,4 @@
-# Copyright (c) 2018 fieldOfView
+# Copyright (c) 2019 ketchu13
 # The FadeHeightSettingPlugin is a ketchu13 modified version of LinearAdvanceSettingPlugin by fieldOfView
 # Released under the terms of the AGPLv3 or higher.
 
