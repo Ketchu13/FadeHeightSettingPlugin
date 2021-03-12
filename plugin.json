@@ -1,7 +1,8 @@
 {
     "name": "Fade Height Setting",
     "author": "ketchu13",
-    "version": "1.0",
+    "version": "1.6",
     "description": "Adds a Fade Height setting that can be used in start gcode snippets.",
-    "api": "6.0"
+    "api": 5,
+    "supported_sdk_versions": ["5.0.0", "6.0.0", "7.0.0"]
 }
