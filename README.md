@@ -10,5 +10,5 @@ If the start gcode doesn't include a M420 statement to set the fade height value
 M420 S{abl_enabled} Z{fade_height_mm}
 ...
 ```
-**What's new in v1.6:**
-Updt to cura 4.8
+**What's new in v 0.2.0:**
+Updt to cura 4.9.13

@@ -4,22 +4,32 @@
 
 import re
 from collections import OrderedDict
+
 from UM.Extension import Extension
 from UM.Application import Application
-from UM.Settings.ContainerRegistry import ContainerRegistry
-from UM.Settings.DefinitionContainer import DefinitionContainer
+from UM.Logger import Logger
+from UM.Version import Version
 from UM.Settings.SettingDefinition import SettingDefinition
+from UM.Settings.DefinitionContainer import DefinitionContainer
+from UM.Settings.ContainerRegistry import ContainerRegistry
 from UM.Logger import Logger
 
+import collections
+import json
+import os.path
+
+from typing import List, Optional, Any, Dict, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from UM.OutputDevice.OutputDevice import OutputDevice
 
 class FadeHeightSettingPlugin(Extension):
-
     def __init__(self):
         super().__init__()
 
         self._application = Application.getInstance()
 
-        self._i18n_catalog = None
+        self._i18n_catalog = None  # type: Optional[i18nCatalog]
 
         self._fade_height_setting_key = "fade_height_mm"
         self._abl_enabled_key = "abl_enabled"
@@ -33,7 +43,7 @@ class FadeHeightSettingPlugin(Extension):
             "default_value": 0,
             "minimum_value": 0,
             "maximum_value_warning": 999,
-
+            "resolve": "extruderValue(adhesion_extruder_nr, 'adhesion_z_offset') if resolveOrValue('adhesion_type') != 'none' else min(extruderValues('adhesion_z_offset'))",
             "settable_per_mesh": False,
             "settable_per_extruder": False,
             "settable_per_meshgroup": False,
@@ -49,10 +59,12 @@ class FadeHeightSettingPlugin(Extension):
             "settable_per_extruder": False,
             "settable_per_meshgroup": False
         }
+        self._expanded_categories = []  # type: List[str]  # temporary list used while creating nested settings
 
         ContainerRegistry.getInstance().containerLoadComplete.connect(self._onContainerLoadComplete)
 
         self._application.getOutputDeviceManager().writeStarted.connect(self._filterGcode)
+
 
     def _onContainerLoadComplete(self, container_id):
         if not ContainerRegistry.getInstance().isLoaded(container_id):
@@ -60,7 +72,7 @@ class FadeHeightSettingPlugin(Extension):
             return
 
         try:
-            container = ContainerRegistry.getInstance().findContainers(id=container_id)[0]
+            container = ContainerRegistry.getInstance().findContainers(id = container_id)[0]
         except IndexError:
             # the container no longer exists
             return
@@ -78,28 +90,29 @@ class FadeHeightSettingPlugin(Extension):
             # this machine doesn't have a zoffset setting yet
             platform_adhesion_category = platform_adhesion_category[0]
             for setting_key, setting_dict in self._settings_dict.items():
-                definition = SettingDefinition(setting_key, container, platform_adhesion_category, self._i18n_catalog)
-                definition.deserialize(setting_dict)
+
+                setting_definition = SettingDefinition(setting_key, container, platform_adhesion_category, self._i18n_catalog)
+                setting_definition.deserialize(setting_dict)
 
                 # add the setting to the already existing platform adhesion settingdefinition
                 # private member access is naughty, but the alternative is to serialise, nix and deserialise the whole thing,
                 # which breaks stuff
-                platform_adhesion_category._children.append(definition)
-                container._definition_cache[setting_key] = definition
-                container._updateRelations(definition)
-
-
+                platform_adhesion_category._children.append(setting_definition)
+                container._definition_cache[setting_key] = setting_definition
+                container._updateRelations(setting_definition)
+                
+    
     def getPropVal(self, name_key):
         """Get the property value by is name"""
         property_value = self._global_container_stack.getProperty(name_key, "value")
         return property_value
 
-
     def _filterGcode(self, output_device):
         scene = self._application.getController().getScene()
 
         global_container_stack = self._application.getGlobalContainerStack()
-        if not global_container_stack:
+        used_extruder_stacks = self._application.getExtruderManager().getUsedExtruderStacks()
+        if not global_container_stack or not used_extruder_stacks:
             return
 
         # check if Fade Height settings are already applied
@@ -111,11 +124,8 @@ class FadeHeightSettingPlugin(Extension):
         fade_height_mm = self.getPropVal()
         abl_enabled = self.getPropVal(self._abl_enabled_key)
 
-        # if fade_height_mm == 0 or abl_enabled is False:
-        # return
-
         gcode_dict = getattr(scene, "gcode_dict", {})
-        if not gcode_dict:  # this also checks for an empty dict
+        if not gcode_dict: # this also checks for an empty dict
             Logger.log("w", "Scene has no gcode to process")
             return
 
@@ -127,9 +137,8 @@ class FadeHeightSettingPlugin(Extension):
                 continue
 
             if ";FADEHEIGHTPROCESSED\n" not in gcode_list[0]:
-                gcode_list[1] = gcode_list[1] + ("M420 S%i Z%d ;added by FadeHeightSettingPlugin\n" % (
-                    int(abl_enabled), fade_height_mm))
-
+                gcode_list[1] = gcode_list[1] + ("M420 S%i Z%d ;added by FadeHeightSettingPlugin\n" % (int(abl_enabled), fade_height_mm))
+               
                 gcode_list[0] += ";FADEHEIGHTPROCESSED\n"
                 gcode_dict[plate_id] = gcode_list
                 dict_changed = True
